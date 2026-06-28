@@ -1,0 +1,39 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.uv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# ---- Node / Next.js ----
+node_modules/
+.next/
+out/
+dist/
+.turbo/
+*.tsbuildinfo
+
+# ---- Environment ----
+.env
+.env.local
+.env.*.local
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+
+# ---- Editor ----
+.idea/
+.vscode/
+*.swp
+
+# ---- Logs / local data ----
+*.log
+/data/
+
+# ---- Internal notes (not for the public repo) ----
+/plans/

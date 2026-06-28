@@ -1,0 +1,2 @@
+# Postgres bootstrap SQL (if any) runs from here on first start.
+# Schema is managed via Alembic migrations in the gateway service (Phase 2).

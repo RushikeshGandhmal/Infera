@@ -1,0 +1,155 @@
+# Infera — local infrastructure.
+#
+# Backing services the app depends on:
+#   postgres          stores conversations and messages
+#   clickhouse        stores inference logs (fast analytics)
+#   redpanda          event broker (Kafka API) between the SDK and storage
+#   redpanda-console  web UI to inspect broker topics
+#   grafana           dashboards, pre-wired to ClickHouse
+#
+# Start it:  cp .env.example .env   &&   make infra
+
+name: infera
+
+services:
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: infera-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-infera}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-infera}
+      POSTGRES_DB: ${POSTGRES_DB:-infera}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-infera} -d ${POSTGRES_DB:-infera}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [infera]
+
+  # ── ClickHouse ──────────────────────────────────────────────────────────────
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    container_name: infera-clickhouse
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-infera}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-infera}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-infera}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      - "8123:8123"   # HTTP interface (used by Grafana plugin & clients)
+      - "9000:9000"   # native protocol
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./infra/clickhouse/init:/docker-entrypoint-initdb.d:ro
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--user", "${CLICKHOUSE_USER:-infera}", "--password", "${CLICKHOUSE_PASSWORD:-infera}", "--query", "SELECT 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    networks: [infera]
+
+  # ── Redpanda (Kafka-compatible broker) ───────────────────────────────────────
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.7
+    container_name: infera-redpanda
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
+      # Two addresses: other containers use `redpanda:9092`; your laptop uses
+      # `localhost:19092`. A Kafka client must dial the address the broker advertises.
+      - --pandaproxy-addr=internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr=internal://redpanda:8082,external://localhost:18082
+      - --schema-registry-addr=internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr=redpanda:33145
+      - --advertise-rpc-addr=redpanda:33145
+      - --mode=dev-container
+      - --smp=1
+      - --default-log-level=info
+    ports:
+      - "18081:18081"   # schema registry (host)
+      - "18082:18082"   # pandaproxy / REST (host)
+      - "19092:19092"   # kafka api (host)
+      - "19644:9644"    # admin api (host)
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks: [infera]
+
+  # ── Redpanda Console (topic inspector UI) ────────────────────────────────────
+  redpanda-console:
+    image: docker.redpanda.com/redpandadata/console:v2.7.2
+    container_name: infera-redpanda-console
+    restart: unless-stopped
+    entrypoint: /bin/sh
+    command: -c 'echo "$$CONSOLE_CONFIG_FILE" > /tmp/config.yml; /app/console'
+    environment:
+      CONFIG_FILEPATH: /tmp/config.yml
+      CONSOLE_CONFIG_FILE: |
+        kafka:
+          brokers: ["redpanda:9092"]
+          schemaRegistry:
+            enabled: true
+            urls: ["http://redpanda:8081"]
+    ports:
+      - "8080:8080"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    networks: [infera]
+
+  # ── Grafana (dashboards) ─────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: infera-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      # Passed through to the provisioned datasource config:
+      CLICKHOUSE_HOST: ${CLICKHOUSE_HOST:-clickhouse}
+      CLICKHOUSE_NATIVE_PORT: ${CLICKHOUSE_NATIVE_PORT:-9000}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-infera}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-infera}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-infera}
+    ports:
+      - "3001:3000"   # host 3001 (3000 reserved for the Next.js dev server)
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    networks: [infera]
+
+volumes:
+  postgres_data:
+  clickhouse_data:
+  redpanda_data:
+  grafana_data:
+
+networks:
+  infera:
+    name: infera

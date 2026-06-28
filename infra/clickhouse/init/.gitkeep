@@ -1,0 +1,2 @@
+# ClickHouse schema (inference_logs + materialized views) is added in Phase 3.
+# SQL files placed in this directory run automatically on first container start.

@@ -1,0 +1,18 @@
+# Grafana datasource provisioning — wires Grafana to ClickHouse automatically.
+# Values are interpolated from environment variables set in docker-compose.yml.
+apiVersion: 1
+
+datasources:
+  - name: ClickHouse
+    uid: infera-clickhouse
+    type: grafana-clickhouse-datasource
+    access: proxy
+    isDefault: true
+    jsonData:
+      host: $CLICKHOUSE_HOST
+      port: $CLICKHOUSE_NATIVE_PORT
+      protocol: native
+      username: $CLICKHOUSE_USER
+      defaultDatabase: $CLICKHOUSE_DB
+    secureJsonData:
+      password: $CLICKHOUSE_PASSWORD
