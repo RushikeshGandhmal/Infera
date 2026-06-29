@@ -3,7 +3,7 @@
 Flow per loop:
   1. pull a batch of messages from the raw topic
   2. parse/validate each into an InferenceLogEvent
-     - good ones go into the batch to store
+     - good ones are PII-redacted and added to the batch to store
      - bad ones ("poison" messages) are routed to the DLQ so one malformed
        message never blocks the pipeline
   3. insert the good batch into ClickHouse (with a few retries)
@@ -27,6 +27,7 @@ from pydantic import ValidationError
 
 from .clickhouse_writer import ClickHouseWriter
 from .config import get_settings
+from .redaction import redact_event
 
 logger = logging.getLogger("infera.worker")
 
@@ -89,7 +90,8 @@ async def run() -> None:
             for _tp, msgs in batches.items():
                 for msg in msgs:
                     try:
-                        valid.append(InferenceLogEvent.model_validate_json(msg.value))
+                        event = InferenceLogEvent.model_validate_json(msg.value)
+                        valid.append(redact_event(event))
                     except ValidationError as exc:
                         bad += 1
                         # Poison message: park it in the DLQ for later inspection

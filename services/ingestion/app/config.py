@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     clickhouse_password: str = "infera"
     clickhouse_db: str = "infera"
 
+    # PII redaction applied to previews before they're stored.
+    #   "regex"    - fast, dependency-free structured-PII scrub (default)
+    #   "presidio" - deep NER detection via Microsoft Presidio (optional dep)
+    #   "none"     - disable redaction
+    redaction_engine: str = "regex"
+
 
 @lru_cache
 def get_settings() -> Settings:
