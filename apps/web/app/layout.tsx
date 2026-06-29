@@ -1,9 +1,16 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
 
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
-  title: "Infera",
-  description: "LLM chat with near real-time inference observability",
+  title: "Infera Chat",
+  description: "Streaming multi-provider chat with built-in inference observability.",
 };
 
 export default function RootLayout({
@@ -12,7 +19,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className={inter.variable}>
       <body>{children}</body>
     </html>
   );
