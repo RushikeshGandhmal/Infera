@@ -1,0 +1,15 @@
+# Tells Grafana to auto-load dashboard JSON files from disk on startup, so the
+# dashboards are version-controlled ("dashboards as code") rather than clicked
+# together by hand.
+apiVersion: 1
+
+providers:
+  - name: Infera
+    orgId: 1
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/json
+      foldersFromFilesStructure: false

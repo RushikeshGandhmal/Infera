@@ -1,0 +1,212 @@
+{
+  "uid": "infera-inference-overview",
+  "title": "Infera — Inference Observability",
+  "tags": ["infera", "llm", "observability"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": { "list": [] },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Total Requests",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "infera-clickhouse" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "area", "textMode": "value" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "infera-clickhouse" },
+          "editorType": "sql",
+          "queryType": "table",
+          "rawSql": "SELECT count() AS requests FROM infera.inference_logs WHERE $__timeFilter(created_at)"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Error Rate",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "infera-clickhouse" },
+      "fieldConfig": { "defaults": { "unit": "percent", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 5 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "none", "textMode": "value" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "infera-clickhouse" },
+          "editorType": "sql",
+          "queryType": "table",
+          "rawSql": "SELECT round(100 * countIf(status = 'error') / greatest(count(), 1), 2) AS error_rate FROM infera.inference_logs WHERE $__timeFilter(created_at)"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "p95 Latency",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "infera-clickhouse" },
+      "fieldConfig": { "defaults": { "unit": "ms", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 2000 }, { "color": "red", "value": 5000 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "none", "textMode": "value" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "infera-clickhouse" },
+          "editorType": "sql",
+          "queryType": "table",
+          "rawSql": "SELECT round(quantile(0.95)(latency_ms)) AS p95_ms FROM infera.inference_logs WHERE $__timeFilter(created_at)"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Total Tokens",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "infera-clickhouse" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "purple", "value": null }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "area", "textMode": "value" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "infera-clickhouse" },
+          "editorType": "sql",
+          "queryType": "table",
+          "rawSql": "SELECT sum(total_tokens) AS tokens FROM infera.inference_logs WHERE $__timeFilter(created_at)"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Latency Percentiles (p50 / p95 / p99)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "infera-clickhouse" },
+      "fieldConfig": { "defaults": { "unit": "ms", "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "auto" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "infera-clickhouse" },
+          "editorType": "sql",
+          "queryType": "timeseries",
+          "rawSql": "SELECT $__timeInterval(created_at) AS time, quantile(0.50)(latency_ms) AS p50, quantile(0.95)(latency_ms) AS p95, quantile(0.99)(latency_ms) AS p99 FROM infera.inference_logs WHERE $__timeFilter(created_at) GROUP BY time ORDER BY time"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Throughput (requests per interval)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "infera-clickhouse" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "bars", "fillOpacity": 50, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "single" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "infera-clickhouse" },
+          "editorType": "sql",
+          "queryType": "timeseries",
+          "rawSql": "SELECT $__timeInterval(created_at) AS time, count() AS requests FROM infera.inference_logs WHERE $__timeFilter(created_at) GROUP BY time ORDER BY time"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Error Rate Over Time",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "infera-clickhouse" },
+      "fieldConfig": { "defaults": { "unit": "percent", "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 15, "showPoints": "auto" }, "color": { "mode": "fixed", "fixedColor": "red" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "single" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "infera-clickhouse" },
+          "editorType": "sql",
+          "queryType": "timeseries",
+          "rawSql": "SELECT $__timeInterval(created_at) AS time, round(100 * countIf(status = 'error') / greatest(count(), 1), 2) AS error_rate_pct FROM infera.inference_logs WHERE $__timeFilter(created_at) GROUP BY time ORDER BY time"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Time To First Token — p95 (streaming)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "infera-clickhouse" },
+      "fieldConfig": { "defaults": { "unit": "ms", "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "auto" }, "color": { "mode": "fixed", "fixedColor": "orange" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "single" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "infera-clickhouse" },
+          "editorType": "sql",
+          "queryType": "timeseries",
+          "rawSql": "SELECT $__timeInterval(created_at) AS time, round(quantile(0.95)(ttft_ms)) AS ttft_p95 FROM infera.inference_logs WHERE $__timeFilter(created_at) AND isNotNull(ttft_ms) GROUP BY time ORDER BY time"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "table",
+      "title": "By Provider",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 20 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "infera-clickhouse" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": { "showHeader": true },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "infera-clickhouse" },
+          "editorType": "sql",
+          "queryType": "table",
+          "rawSql": "SELECT provider, count() AS requests, round(quantile(0.95)(latency_ms)) AS p95_ms, sum(total_tokens) AS tokens FROM infera.inference_logs WHERE $__timeFilter(created_at) GROUP BY provider ORDER BY requests DESC"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "By Model",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 20 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "infera-clickhouse" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": { "showHeader": true },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "infera-clickhouse" },
+          "editorType": "sql",
+          "queryType": "table",
+          "rawSql": "SELECT model, count() AS requests, sum(prompt_tokens) AS prompt, sum(completion_tokens) AS completion, sum(total_tokens) AS total FROM infera.inference_logs WHERE $__timeFilter(created_at) GROUP BY model ORDER BY total DESC"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "table",
+      "title": "Cost by Provider (USD)",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 20 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "infera-clickhouse" },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" }, "overrides": [] },
+      "options": { "showHeader": true },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "infera-clickhouse" },
+          "editorType": "sql",
+          "queryType": "table",
+          "rawSql": "SELECT provider, round(sum(cost_usd), 6) AS cost_usd FROM infera.inference_logs WHERE $__timeFilter(created_at) GROUP BY provider ORDER BY cost_usd DESC"
+        }
+      ]
+    }
+  ]
+}
