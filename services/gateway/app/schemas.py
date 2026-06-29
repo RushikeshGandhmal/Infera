@@ -6,6 +6,8 @@ the database models (which are an internal detail) and from the SDK schemas.
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
@@ -33,3 +35,40 @@ class ChatResponse(BaseModel):
     model: str
     latency_ms: float
     usage: Usage
+
+
+class ConversationSummary(BaseModel):
+    """One row in the conversation list (no message bodies)."""
+
+    id: str
+    title: str | None
+    status: str
+    model: str | None
+    message_count: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class MessageOut(BaseModel):
+    """A single message when a conversation is opened/resumed."""
+
+    id: str
+    role: str
+    content: str
+    status: str
+    prompt_tokens: int | None
+    completion_tokens: int | None
+    request_id: str | None
+    created_at: datetime
+
+
+class ConversationDetail(BaseModel):
+    """A full conversation with its messages, used to resume a chat."""
+
+    id: str
+    title: str | None
+    status: str
+    model: str | None
+    created_at: datetime
+    updated_at: datetime
+    messages: list[MessageOut]
