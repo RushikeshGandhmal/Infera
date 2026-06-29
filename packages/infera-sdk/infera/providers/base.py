@@ -20,6 +20,7 @@ class StreamChunk:
 
     delta: str = ""
     usage: Optional[Usage] = None
+    model: Optional[str] = None  # actual model that answered, when the provider reports it
     raw: Optional[dict[str, Any]] = None
 
 
@@ -49,6 +50,10 @@ class Provider(ABC):
         self, messages: list[Message], model: str, **kwargs: Any
     ) -> AsyncIterator[StreamChunk]:
         """Yield reply chunks as they arrive (implemented as an async generator)."""
+
+    def provider_for(self, model: str) -> str:
+        """Upstream provider name for a model. Override when one adapter proxies many."""
+        return self.name
 
     async def aclose(self) -> None:  # noqa: B027 - optional override
         """Release resources like HTTP connections. Optional."""

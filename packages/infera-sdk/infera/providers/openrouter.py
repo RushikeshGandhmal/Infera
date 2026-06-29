@@ -62,6 +62,9 @@ class OpenRouterProvider(Provider):
             "messages": [{"role": m.role.value, "content": m.content} for m in messages],
             "stream": stream,
         }
+        if stream:
+            # Ask OpenRouter to send a final chunk with token usage (off by default).
+            body["stream_options"] = {"include_usage": True}
         body.update({k: v for k, v in kwargs.items() if v is not None})  # temperature, max_tokens, ...
         return body
 
@@ -100,7 +103,10 @@ class OpenRouterProvider(Provider):
                 delta = (choices[0].get("delta") or {}).get("content") or "" if choices else ""
                 usage = _usage_from_payload(chunk) if chunk.get("usage") else None
                 if delta or usage:
-                    yield StreamChunk(delta=delta, usage=usage, raw=chunk)
+                    yield StreamChunk(delta=delta, usage=usage, model=chunk.get("model"), raw=chunk)
+
+    def provider_for(self, model: str) -> str:
+        return _provider_from_model(model)
 
     async def aclose(self) -> None:
         await self._client.aclose()

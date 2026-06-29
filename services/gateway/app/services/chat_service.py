@@ -15,11 +15,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from infera import InferaClient
+from infera import ChatResult, InferaClient, InferenceStatus
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
+from ..db import SessionLocal
 from ..models import (
     Conversation,
     ConversationStatus,
@@ -83,6 +84,67 @@ async def _load_context(session: AsyncSession, conversation_id: str, limit: int)
     return list(reversed(rows.scalars().all()))
 
 
+@dataclass
+class PreparedTurn:
+    conversation_id: str
+    model: str
+    sdk_messages: list[dict[str, str]]
+
+
+async def prepare_turn(
+    session: AsyncSession,
+    *,
+    message: str,
+    conversation_id: str | None,
+    model: str | None,
+) -> PreparedTurn:
+    """Resolve the conversation, save the user message, and build the context.
+
+    Shared by the streaming and non-streaming paths. Flushes but does not
+    commit, so the caller owns the transaction boundary.
+    """
+    settings = get_settings()
+    model = model or settings.default_model
+    convo = await _get_or_create_conversation(session, conversation_id, model, message)
+    session.add(Message(conversation_id=convo.id, role=MessageRole.USER, content=message))
+    await session.flush()
+    history = await _load_context(session, convo.id, settings.max_context_messages)
+    sdk_messages = [{"role": m.role.value, "content": m.content} for m in history]
+    return PreparedTurn(conversation_id=convo.id, model=model, sdk_messages=sdk_messages)
+
+
+_STATUS_MAP = {
+    InferenceStatus.SUCCESS: MessageStatus.COMPLETE,
+    InferenceStatus.ERROR: MessageStatus.ERROR,
+    InferenceStatus.CANCELLED: MessageStatus.CANCELLED,
+}
+
+
+async def persist_stream_result(conversation_id: str, result: ChatResult) -> None:
+    """Save the assistant reply after a streamed turn ends, using its own session.
+
+    The streaming HTTP response holds no DB session open for the whole stream, so
+    we open a short-lived one here once we have the final text and metadata.
+    """
+    async with SessionLocal() as session:
+        convo = await session.get(Conversation, conversation_id)
+        if convo is None:
+            return
+        session.add(
+            Message(
+                conversation_id=conversation_id,
+                role=MessageRole.ASSISTANT,
+                content=result.text,
+                status=_STATUS_MAP.get(result.status, MessageStatus.COMPLETE),
+                prompt_tokens=result.usage.prompt_tokens,
+                completion_tokens=result.usage.completion_tokens,
+                request_id=result.request_id,
+            )
+        )
+        convo.model = result.model
+        await session.commit()
+
+
 async def handle_chat(
     session: AsyncSession,
     client: InferaClient,
@@ -91,31 +153,23 @@ async def handle_chat(
     conversation_id: str | None = None,
     model: str | None = None,
 ) -> ChatOutcome:
-    settings = get_settings()
-    model = model or settings.default_model
-
-    convo = await _get_or_create_conversation(session, conversation_id, model, message)
-
-    # 2. persist the user's message before calling the model.
-    session.add(Message(conversation_id=convo.id, role=MessageRole.USER, content=message))
-    await session.flush()
-
-    # 3. context = recent history (now includes the message we just saved).
-    history = await _load_context(session, convo.id, settings.max_context_messages)
-    sdk_messages = [{"role": m.role.value, "content": m.content} for m in history]
-
-    # 4. call the LLM through the SDK.
-    result = await client.chat(
-        sdk_messages,
-        model=model,
-        session_id=convo.id,
-        conversation_id=convo.id,
+    prep = await prepare_turn(
+        session, message=message, conversation_id=conversation_id, model=model
     )
 
-    # 5. persist the assistant reply, linked to its inference log by request_id.
+    # call the LLM through the SDK.
+    result = await client.chat(
+        prep.sdk_messages,
+        model=prep.model,
+        session_id=prep.conversation_id,
+        conversation_id=prep.conversation_id,
+    )
+
+    # persist the assistant reply, linked to its inference log by request_id.
+    convo = await session.get(Conversation, prep.conversation_id)
     session.add(
         Message(
-            conversation_id=convo.id,
+            conversation_id=prep.conversation_id,
             role=MessageRole.ASSISTANT,
             content=result.text,
             status=MessageStatus.COMPLETE,
@@ -124,11 +178,12 @@ async def handle_chat(
             request_id=result.request_id,
         )
     )
-    convo.model = result.model  # remember the model that actually answered
+    if convo is not None:
+        convo.model = result.model  # remember the model that actually answered
     await session.commit()
 
     return ChatOutcome(
-        conversation_id=convo.id,
+        conversation_id=prep.conversation_id,
         request_id=result.request_id,
         reply=result.text,
         provider=result.provider,

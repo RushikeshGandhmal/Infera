@@ -6,7 +6,7 @@ shipper. The chat path stays fast; logging happens in the background.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from typing import Any, Optional, Union
 
 from .instrumentation import CallTimer
@@ -135,18 +135,27 @@ class InferaClient:
         session_id: Optional[str] = None,
         conversation_id: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
+        on_complete: Optional[Callable[[ChatResult], None]] = None,
         **kwargs: Any,
     ) -> AsyncIterator[str]:
-        """Yield text pieces as they arrive, then ship one log event at the end."""
+        """Yield text pieces as they arrive, then ship one log event at the end.
+
+        `on_complete` (if given) receives a ChatResult with the final metadata
+        (request_id, usage, latency, ttft, provider/model) once the stream ends —
+        useful for callers that need to persist the assistant reply afterwards.
+        """
         msgs = _normalize(messages)
         request_id = new_request_id()
         timer = CallTimer()
         parts: list[str] = []
         usage = Usage()
+        actual_model: Optional[str] = None
         status = InferenceStatus.SUCCESS
         error: Optional[Exception] = None
         try:
             async for chunk in self._provider.stream(msgs, model, **kwargs):
+                if chunk.model:
+                    actual_model = chunk.model
                 if chunk.delta:
                     timer.mark_first_token()
                     parts.append(chunk.delta)
@@ -163,13 +172,27 @@ class InferaClient:
             raise
         finally:
             timer.stop()
-            in_prev, out_prev, redacted = self._previews(_last_user_text(msgs), "".join(parts))
+            final_model = actual_model or model
+            final_provider = self._provider.provider_for(final_model)
+            text = "".join(parts)
+            in_prev, out_prev, redacted = self._previews(_last_user_text(msgs), text)
             self._emit(self._build_event(
-                request_id, session_id, conversation_id, self._provider.name, model,
+                request_id, session_id, conversation_id, final_provider, final_model,
                 status, timer, usage, in_text=None, out_text=None,
                 error=error, metadata=metadata,
                 input_preview=in_prev, output_preview=out_prev, redacted=redacted,
             ))
+            if on_complete is not None:
+                on_complete(ChatResult(
+                    request_id=request_id,
+                    text=text,
+                    provider=final_provider,
+                    model=final_model,
+                    usage=usage,
+                    status=status,
+                    latency_ms=timer.latency_ms,
+                    ttft_ms=timer.ttft_ms,
+                ))
 
     # ----- shared event builder (errors / streaming) -----
     def _build_event(
