@@ -22,6 +22,18 @@ class Settings(BaseSettings):
     postgres_host: str = "localhost"
     postgres_port: int = 5432
 
+    # LLM access (OpenRouter). If no key is set, the gateway falls back to a
+    # mock provider so it still runs end-to-end without spending anything.
+    openrouter_api_key: str | None = None
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_app_title: str | None = "Infera"
+    openrouter_app_url: str | None = None
+    default_model: str = "openai/gpt-4o-mini"
+
+    # Where the SDK ships inference logs. None = don't ship (until ingestion exists).
+    ingestion_url: str | None = None
+    redact_previews: bool = False
+
     # How many recent messages to send back to the model as context.
     max_context_messages: int = 20
 
