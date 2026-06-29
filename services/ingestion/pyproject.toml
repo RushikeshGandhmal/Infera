@@ -7,6 +7,8 @@ dependencies = [
     "fastapi>=0.111",
     "uvicorn[standard]>=0.30",
     "aiokafka>=0.11",
+    "cramjam>=2.8",
+    "clickhouse-connect>=0.7",
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
     "infera-sdk",

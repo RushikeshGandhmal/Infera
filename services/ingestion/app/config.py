@@ -22,6 +22,20 @@ class Settings(BaseSettings):
     topic_raw: str = "inference.logs.raw"
     topic_dlq: str = "inference.logs.dlq"
 
+    # Worker (consumer side)
+    consumer_group: str = "infera-ingestion-worker"
+    poll_timeout_ms: int = 1000  # how long a poll waits for records
+    max_records: int = 500  # batch size pulled per poll (ClickHouse likes batches)
+    insert_max_retries: int = 3  # retry a failed ClickHouse insert before giving up
+
+    # ClickHouse connection (HTTP interface). On the host use localhost; inside
+    # Docker use "clickhouse".
+    clickhouse_host: str = "localhost"
+    clickhouse_http_port: int = 8123
+    clickhouse_user: str = "infera"
+    clickhouse_password: str = "infera"
+    clickhouse_db: str = "infera"
+
 
 @lru_cache
 def get_settings() -> Settings:
