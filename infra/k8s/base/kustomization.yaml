@@ -7,6 +7,10 @@ resources:
   - namespace.yaml
   - configmap.yaml
   - secret.yaml
+  - postgres.yaml
+  - clickhouse.yaml
+  - clickhouse-init.yaml
+  - redpanda.yaml
   - gateway.yaml
   - ingestion.yaml
   - web.yaml
