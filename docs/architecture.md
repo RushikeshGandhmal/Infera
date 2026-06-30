@@ -21,7 +21,7 @@ Gateway API
 Infera SDK
   |
   v
-OpenRouter / model provider
+Ollama / OpenRouter provider
 
 
 Infera SDK
@@ -50,7 +50,7 @@ The chat path is the user-facing path.
 2. The web app calls the Gateway API.
 3. The gateway stores the user message in Postgres.
 4. The gateway sends the conversation context to the Infera SDK.
-5. The SDK calls the selected model through OpenRouter.
+5. The SDK calls the selected model through Ollama or OpenRouter.
 6. The response streams back to the browser.
 7. The final assistant message is saved in Postgres.
 
@@ -71,6 +71,18 @@ The logging path is separate from the chat path.
 
 This path is intentionally asynchronous. If ingestion or ClickHouse is slow, the
 chat response should still continue.
+
+## Model Providers
+
+The gateway runs in `auto` provider mode by default:
+
+- if `OPENROUTER_API_KEY` is configured, OpenRouter is used for hosted models
+- if no OpenRouter key is configured, local Ollama is used
+- if OpenRouter fails before a streamed response starts, the gateway can fall
+  back to the configured Ollama model
+
+This keeps local demos independent of hosted API keys while preserving
+multi-provider support through OpenRouter.
 
 ## Storage Choices
 

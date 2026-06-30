@@ -35,7 +35,7 @@ Gateway API (FastAPI)
 Infera SDK
   |
   v
-OpenRouter / LLM provider
+Ollama / OpenRouter provider
 
 
 Infera SDK
@@ -68,7 +68,7 @@ See [docs/architecture.md](docs/architecture.md) for the detailed design.
 | Frontend | Next.js, TypeScript, Tailwind |
 | Gateway | Python, FastAPI, SQLAlchemy async |
 | SDK | Python package (`infera`) |
-| LLM access | OpenRouter |
+| LLM access | Ollama locally, OpenRouter for hosted providers |
 | Transactional DB | PostgreSQL |
 | Analytics DB | ClickHouse |
 | Broker | Redpanda (Kafka API) |
@@ -80,6 +80,7 @@ See [docs/architecture.md](docs/architecture.md) for the detailed design.
 ## Prerequisites
 
 - Docker and Docker Compose
+- Ollama with `qwen3:14b` pulled for local model calls
 - Optional for host development: `uv`, Node.js, and pnpm
 - Optional: `kubectl` for Kubernetes manifest rendering/deployment
 
@@ -92,8 +93,15 @@ cp .env.example .env
 docker compose up --build
 ```
 
-By default the app uses a mock provider, so it runs without an API key. To call
-real models, set `OPENROUTER_API_KEY` in `.env` before starting the stack.
+By default the app uses local Ollama when no OpenRouter key is configured. Pull
+the local model before starting the stack:
+
+```bash
+ollama pull qwen3:14b
+```
+
+OpenRouter models are also implemented in the model picker. They require a valid
+`OPENROUTER_API_KEY`; without one, the local Ollama model is the default path.
 If port `3000` is already in use, set `WEB_PORT=3002` in `.env` and open
 `http://localhost:3002`.
 
@@ -129,15 +137,20 @@ Important values:
 
 | Variable | Purpose |
 |---|---|
+| `LLM_PROVIDER` | `auto`, `ollama`, `openrouter`, or `mock` |
 | `OPENROUTER_API_KEY` | Optional; enables real model calls through OpenRouter |
+| `OLLAMA_BASE_URL` | Local Ollama OpenAI-compatible endpoint |
+| `OLLAMA_MODEL` | Local fallback/default model |
+| `DEFAULT_MODEL` | Model used when the client does not send one |
 | `INGESTION_URL` | Where the SDK sends inference logs |
 | `POSTGRES_*` | Gateway conversation database |
 | `CLICKHOUSE_*` | Metrics database |
 | `KAFKA_BOOTSTRAP_SERVERS` | Redpanda/Kafka connection |
 | `WEB_PORT` | Host port for the web app |
 
-If `OPENROUTER_API_KEY` is missing, the gateway uses the mock provider so the
-app still runs end-to-end without spending money.
+In `auto` mode, the gateway uses OpenRouter when `OPENROUTER_API_KEY` is set.
+If the key is missing, it uses local Ollama. If OpenRouter fails before a stream
+starts, the gateway can fall back to `OLLAMA_MODEL`.
 
 ## Data Model
 
