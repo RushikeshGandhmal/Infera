@@ -162,6 +162,11 @@ The Kubernetes manifests live under `infra/k8s`.
 - `overlays/production` changes image names and public domains for a real
   deployment.
 
+The submitted demo uses Docker Compose rather than a live Kubernetes cluster.
+The manifests are included to show the deployment shape and can be rendered or
+validated locally. In Kubernetes, OpenRouter is the simplest model-provider path.
+Using Ollama there requires an Ollama service reachable from the gateway pods.
+
 The app images are built from the Dockerfiles in:
 
 - `apps/web/Dockerfile`

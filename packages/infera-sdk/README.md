@@ -7,17 +7,37 @@ non-blocking, so it never slows down or breaks the chat itself.
 
 ```python
 from infera import InferaClient
-from infera.providers import OpenRouterProvider
+from infera.providers import FallbackProvider, OllamaProvider, OpenRouterProvider
 
 client = InferaClient(
-    provider=OpenRouterProvider(api_key="sk-or-..."),
+    provider=OllamaProvider(base_url="http://localhost:11434/v1"),
     ingestion_url="http://localhost:8001/v1/logs",
 )
 
 result = await client.chat(
     messages=[{"role": "user", "content": "Hello!"}],
-    model="openai/gpt-4o-mini",
+    model="qwen3:14b",
     session_id="sess_123",
 )
 print(result.text, result.latency_ms, result.usage.total_tokens)
+```
+
+OpenRouter can be used for hosted models:
+
+```python
+client = InferaClient(
+    provider=OpenRouterProvider(api_key="sk-or-..."),
+    ingestion_url="http://localhost:8001/v1/logs",
+)
+```
+
+The providers can also be composed so a hosted provider falls back to local
+Ollama before any streamed tokens are sent:
+
+```python
+provider = FallbackProvider(
+    OpenRouterProvider(api_key="sk-or-..."),
+    OllamaProvider(base_url="http://localhost:11434/v1"),
+    fallback_model="qwen3:14b",
+)
 ```

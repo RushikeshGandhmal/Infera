@@ -100,10 +100,15 @@ the local model before starting the stack:
 ollama pull qwen3:14b
 ```
 
+For faster local responses on smaller machines, also pull `qwen3:8b` and select
+`Qwen3 8B - Local` in the model picker:
+
+```bash
+ollama pull qwen3:8b
+```
+
 OpenRouter models are also implemented in the model picker. They require a valid
 `OPENROUTER_API_KEY`; without one, the local Ollama model is the default path.
-If port `3000` is already in use, set `WEB_PORT=3002` in `.env` and open
-`http://localhost:3002`.
 
 Open:
 
@@ -224,7 +229,13 @@ python -m app.consumer
 
 ## Kubernetes
 
-Kubernetes manifests live in `infra/k8s`.
+Kubernetes manifests live in `infra/k8s`. They are included as deployment assets
+and can be rendered/validated locally, but the demo path is Docker Compose.
+
+The Kubernetes manifests assume hosted model access through OpenRouter. Local
+Ollama is intentionally a local development path; to use Ollama on Kubernetes,
+deploy Ollama in-cluster or point `OLLAMA_BASE_URL` at a reachable Ollama
+service. A real deployment should set a valid `OPENROUTER_API_KEY` secret.
 
 Render the reusable base:
 
@@ -250,6 +261,9 @@ Then apply:
 ```bash
 kubectl apply -k infra/k8s/overlays/production
 ```
+
+For this demo, deployment to a live cluster is not required; the manifests are
+kept readable so the deployment shape can be reviewed.
 
 The manifests include:
 
