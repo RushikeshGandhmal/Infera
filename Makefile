@@ -3,7 +3,7 @@
 # ─────────────────────────────────────────────────────────────
 .DEFAULT_GOAL := help
 
-.PHONY: help env infra up down stop logs ps health clean
+.PHONY: help env infra up down stop logs ps health clean dev dev-down dev-logs dev-status
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -34,3 +34,18 @@ health: ## Show health/status of each service
 
 clean: ## Stop everything and DELETE all data volumes
 	docker compose down -v
+
+# ─────────────────────────────────────────────────────────────
+# Local dev (run backend services on the host, one command)
+# ─────────────────────────────────────────────────────────────
+dev: ## Start full local backend (infra + gateway + ingestion + worker)
+	@./scripts/dev.sh up
+
+dev-down: ## Stop the local backend services started by `make dev`
+	@./scripts/dev.sh down
+
+dev-logs: ## Tail logs from the local backend services
+	@./scripts/dev.sh logs
+
+dev-status: ## Show status of the local backend services
+	@./scripts/dev.sh status

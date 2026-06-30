@@ -34,6 +34,7 @@ Thumbs.db
 # ---- Logs / local data ----
 *.log
 /data/
+.run/
 
 # ---- Internal notes (not for the public repo) ----
 /plans/
