@@ -157,12 +157,15 @@ In `auto` mode, the gateway uses OpenRouter when `OPENROUTER_API_KEY` is set.
 If the key is missing, it uses local Ollama. If OpenRouter fails before a stream
 starts, the gateway can fall back to `OLLAMA_MODEL`.
 
-## Data Model
+## Schema Design Decisions
 
 Postgres stores chat state:
 
 - `conversations`: title, status, selected/last model, timestamps
 - `messages`: role, content, status, token counts, linked request ID
+
+Postgres is the source of truth for the user-facing chat experience because
+conversation reads and writes need transactional consistency.
 
 ClickHouse stores inference logs:
 
@@ -176,6 +179,12 @@ ClickHouse stores inference logs:
 
 The ClickHouse table definition lives in
 `infra/clickhouse/init/01_inference_logs.sql`.
+
+Inference logs go through Redpanda before ClickHouse instead of being written
+directly from the chat request. This keeps logging asynchronous, lets the chat
+response continue if analytics storage is slow, and gives the worker a durable
+event stream to retry from. Redpanda is not the final database; it is the buffer
+between live inference traffic and analytics storage.
 
 ## Reliability
 

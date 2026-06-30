@@ -105,6 +105,28 @@ ClickHouse stores analytics data:
 - short redacted previews
 
 This split keeps chat simple and consistent while making metrics queries fast.
+Redpanda sits between ingestion and ClickHouse as the event buffer. The gateway
+and SDK should not write analytics rows directly during the user request because
+that would couple chat latency to ClickHouse availability. With Redpanda, logs
+can be accepted quickly, processed asynchronously, retried by the worker, and
+replayed later if the analytics schema or processing logic changes.
+
+Extracted metadata is stored in typed ClickHouse columns where it is frequently
+queried, such as provider, model, status, latency, token counts, and cost.
+Less-structured details stay in the metadata JSON column so the schema can
+evolve without a migration for every new provider field.
+
+## Scaling Considerations
+
+The chat API, ingestion API, and worker can scale independently. Redpanda
+buffers inference events so spikes in chat traffic do not directly overload
+ClickHouse. More ingestion workers can be added as event volume grows, and
+ClickHouse remains responsible for high-volume metrics queries instead of
+placing analytics load on Postgres.
+
+Postgres is kept focused on conversation state. That makes the product path
+simple to reason about, while ClickHouse and Redpanda handle the higher-volume
+observability path.
 
 ## Reliability Model
 
@@ -123,6 +145,18 @@ duplicate deliveries can collapse during merges.
 
 Malformed events are sent to a dead-letter topic so one bad message does not
 block the whole pipeline.
+
+## Failure Handling Assumptions
+
+If the ingestion API or broker is unavailable, the SDK retries in the background
+until its bounded queue is exhausted. If ClickHouse is temporarily unavailable,
+the worker does not commit the Redpanda offset until the insert succeeds. This
+can produce duplicate delivery, so the ClickHouse table uses a replacing engine
+to collapse duplicate events over time.
+
+The system prioritizes serving the chat response over perfect observability
+delivery. For this assignment, that is an intentional tradeoff: user-facing
+inference should continue even when the analytics path is degraded.
 
 ## Redaction
 
