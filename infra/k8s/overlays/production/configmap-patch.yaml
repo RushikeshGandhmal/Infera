@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: infera-config
+data:
+  OPENROUTER_APP_URL: "https://infera.your-domain.example"
+  NEXT_PUBLIC_API_URL: "https://api.infera.your-domain.example"
