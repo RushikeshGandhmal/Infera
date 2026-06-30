@@ -14,3 +14,4 @@ resources:
   - gateway.yaml
   - ingestion.yaml
   - web.yaml
+  - ingress.yaml

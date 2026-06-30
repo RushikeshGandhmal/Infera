@@ -1,0 +1,51 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: infera-web
+  labels:
+    app.kubernetes.io/name: infera-web
+    app.kubernetes.io/part-of: infera
+  annotations:
+    kubernetes.io/ingress.class: traefik
+spec:
+  tls:
+    - hosts:
+        - infera.example.com
+      secretName: infera-web-tls
+  rules:
+    - host: infera.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: infera-web
+                port:
+                  name: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: infera-gateway
+  labels:
+    app.kubernetes.io/name: infera-gateway
+    app.kubernetes.io/part-of: infera
+  annotations:
+    kubernetes.io/ingress.class: traefik
+spec:
+  tls:
+    - hosts:
+        - api.infera.example.com
+      secretName: infera-api-tls
+  rules:
+    - host: api.infera.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: infera-gateway
+                port:
+                  name: http
