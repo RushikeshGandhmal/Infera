@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+const API =
+  process.env.NEXT_PUBLIC_API_URL ??
+  process.env.NEXT_PUBLIC_API_BASE ??
+  "http://localhost:8000";
 
 type Totals = {
   requests: number;
@@ -99,7 +102,7 @@ export default function MetricsPage() {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/metrics/summary?window=${window}`);
+      const res = await fetch(`${API}/metrics/summary?window=${window}`);
       setData(await res.json());
     } catch {
       setData(null);
