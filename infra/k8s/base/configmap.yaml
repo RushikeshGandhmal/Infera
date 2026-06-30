@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: infera-config
+data:
+  DEFAULT_MODEL: "openai/gpt-4o-mini"
+  OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1"
+  OPENROUTER_APP_TITLE: "Infera"
+  OPENROUTER_APP_URL: "https://infera.example.com"
+
+  INGESTION_URL: "http://infera-ingestion:8001/v1/logs"
+
+  POSTGRES_HOST: "postgres"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "infera"
+
+  CLICKHOUSE_HOST: "clickhouse"
+  CLICKHOUSE_HTTP_PORT: "8123"
+  CLICKHOUSE_DB: "infera"
+
+  KAFKA_BOOTSTRAP_SERVERS: "redpanda:9092"
+  TOPIC_RAW: "inference.logs.raw"
+  TOPIC_DLQ: "inference.logs.dlq"
+
+  NEXT_PUBLIC_API_URL: "https://api.infera.example.com"
