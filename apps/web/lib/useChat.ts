@@ -28,19 +28,71 @@ export function useChat(onAfterTurn?: (conversationId: string) => void) {
   const [model, setModel] = useState<string>(DEFAULT_MODEL);
   const [lastMeta, setLastMeta] = useState<DoneMeta | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const conversationIdRef = useRef<string | null>(null);
+  const selectionVersionRef = useRef(0);
+  const loadSeqRef = useRef(0);
+  const streamSeqRef = useRef(0);
+  const activeStreamRef = useRef<{
+    id: number;
+    conversationId: string | null;
+    selectionVersion: number;
+    messages: ChatMessage[];
+  } | null>(null);
+
+  const showConversation = useCallback((id: string | null) => {
+    conversationIdRef.current = id;
+    selectionVersionRef.current += 1;
+    setConversationId(id);
+  }, []);
+
+  const streamIsVisible = useCallback(
+    (stream: { conversationId: string | null; selectionVersion: number }) =>
+      stream.conversationId === conversationIdRef.current &&
+      (stream.conversationId !== null ||
+        stream.selectionVersion === selectionVersionRef.current),
+    [],
+  );
+
+  const patchActiveStream = useCallback(
+    (
+      streamId: number,
+      patch: (m: ChatMessage) => ChatMessage,
+    ) => {
+      const stream = activeStreamRef.current;
+      if (!stream || stream.id !== streamId) return;
+
+      stream.messages = patchLastAssistant(stream.messages, patch);
+      if (streamIsVisible(stream)) {
+        setMessages(stream.messages);
+      }
+    },
+    [streamIsVisible],
+  );
 
   const send = useCallback(
     async (text: string) => {
       const trimmed = text.trim();
       if (!trimmed || isStreaming) return;
 
+      const streamId = streamSeqRef.current + 1;
+      streamSeqRef.current = streamId;
+      const startConversationId = conversationIdRef.current;
+      const startSelectionVersion = selectionVersionRef.current;
+      const optimisticMessages = [
+        ...messages,
+        { role: "user" as const, content: trimmed },
+        { role: "assistant" as const, content: "", pending: true },
+      ];
+
       // Optimistically show the user message plus an empty assistant bubble
       // that tokens will stream into.
-      setMessages((prev) => [
-        ...prev,
-        { role: "user", content: trimmed },
-        { role: "assistant", content: "", pending: true },
-      ]);
+      activeStreamRef.current = {
+        id: streamId,
+        conversationId: startConversationId,
+        selectionVersion: startSelectionVersion,
+        messages: optimisticMessages,
+      };
+      setMessages(optimisticMessages);
       setIsStreaming(true);
 
       const ctrl = new AbortController();
@@ -48,60 +100,81 @@ export function useChat(onAfterTurn?: (conversationId: string) => void) {
 
       try {
         await streamChat(
-          { message: trimmed, conversation_id: conversationId, model },
+          { message: trimmed, conversation_id: startConversationId, model },
           {
             signal: ctrl.signal,
-            onStart: (cid) => setConversationId(cid),
+            onStart: (cid) => {
+              const stream = activeStreamRef.current;
+              if (!stream || stream.id !== streamId) return;
+
+              stream.conversationId = cid;
+
+              // For a new conversation, the server assigns the real id after
+              // the stream opens. Only move the visible selection if the user
+              // has not navigated away while the request was starting.
+              if (
+                conversationIdRef.current === startConversationId &&
+                selectionVersionRef.current === startSelectionVersion
+              ) {
+                conversationIdRef.current = cid;
+                setConversationId(cid);
+              }
+            },
             onToken: (t) =>
-              setMessages((prev) =>
-                patchLastAssistant(prev, (m) => ({
-                  ...m,
-                  content: m.content + t,
-                })),
-              ),
+              patchActiveStream(streamId, (m) => ({
+                ...m,
+                content: m.content + t,
+              })),
             onDone: (meta) => {
-              setLastMeta(meta);
-              setMessages((prev) =>
-                patchLastAssistant(prev, (m) => ({
-                  ...m,
-                  pending: false,
-                  meta: {
-                    model: meta.model,
-                    latency_ms: meta.latency_ms,
-                    ttft_ms: meta.ttft_ms,
-                    total_tokens: meta.usage?.total_tokens ?? null,
-                  },
-                })),
-              );
+              if (conversationIdRef.current === meta.conversation_id) {
+                setLastMeta(meta);
+              }
+              patchActiveStream(streamId, (m) => ({
+                ...m,
+                pending: false,
+                meta: {
+                  model: meta.model,
+                  latency_ms: meta.latency_ms,
+                  ttft_ms: meta.ttft_ms,
+                  total_tokens: meta.usage?.total_tokens ?? null,
+                },
+              }));
               onAfterTurn?.(meta.conversation_id);
             },
             onError: (detail) =>
-              setMessages((prev) =>
-                patchLastAssistant(prev, (m) => ({
-                  ...m,
-                  content: m.content || `⚠️ ${detail}`,
-                  pending: false,
-                  error: true,
-                })),
-              ),
+              patchActiveStream(streamId, (m) => ({
+                ...m,
+                content: m.content || `⚠️ ${detail}`,
+                pending: false,
+                error: true,
+              })),
           },
         );
       } catch (err) {
         const aborted = (err as Error).name === "AbortError";
-        setMessages((prev) =>
-          patchLastAssistant(prev, (m) => ({
-            ...m,
-            content: aborted ? m.content + "\n\n_(stopped)_" : `⚠️ ${(err as Error).message}`,
-            pending: false,
-            error: !aborted,
-          })),
-        );
+        patchActiveStream(streamId, (m) => ({
+          ...m,
+          content: aborted
+            ? m.content + "\n\n_(stopped)_"
+            : `⚠️ ${(err as Error).message}`,
+          pending: false,
+          error: !aborted,
+        }));
       } finally {
-        setIsStreaming(false);
-        abortRef.current = null;
+        if (activeStreamRef.current?.id === streamId) {
+          activeStreamRef.current = null;
+          setIsStreaming(false);
+          abortRef.current = null;
+        }
       }
     },
-    [conversationId, model, isStreaming, onAfterTurn],
+    [
+      isStreaming,
+      messages,
+      model,
+      onAfterTurn,
+      patchActiveStream,
+    ],
   );
 
   // Stop the in-flight streamed reply (the "cancel a streaming response" UX).
@@ -110,25 +183,35 @@ export function useChat(onAfterTurn?: (conversationId: string) => void) {
   }, []);
 
   const loadConversation = useCallback(async (id: string) => {
+    const seq = loadSeqRef.current + 1;
+    loadSeqRef.current = seq;
     const detail = await getConversation(id);
-    setConversationId(detail.id);
+    if (seq !== loadSeqRef.current) return;
+
+    showConversation(detail.id);
     if (detail.model) setModel(detail.model);
-    setMessages(
-      detail.messages.map((m) => ({
-        id: m.id,
-        role: m.role,
-        content: m.content,
-        status: m.status,
-      })),
-    );
+    const stream = activeStreamRef.current;
+    if (stream?.conversationId === detail.id) {
+      setMessages(stream.messages);
+    } else {
+      setMessages(
+        detail.messages.map((m) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          status: m.status,
+        })),
+      );
+    }
     setLastMeta(null);
-  }, []);
+  }, [showConversation]);
 
   const newConversation = useCallback(() => {
-    setConversationId(null);
+    loadSeqRef.current += 1;
+    showConversation(null);
     setMessages([]);
     setLastMeta(null);
-  }, []);
+  }, [showConversation]);
 
   return {
     conversationId,
