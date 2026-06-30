@@ -12,10 +12,11 @@ help: ## Show this help
 env: ## Create .env from .env.example if missing
 	@test -f .env || (cp .env.example .env && echo "Created .env — set OPENROUTER_API_KEY")
 
-infra: env ## Start infrastructure (postgres, clickhouse, redpanda, grafana)
-	docker compose up -d
+infra: env ## Start backing infrastructure only
+	docker compose up -d postgres clickhouse redpanda redpanda-init redpanda-console grafana
 
-up: infra ## Alias for `infra`
+up: env ## Start the full app stack
+	docker compose up -d --build
 
 down: ## Stop and remove containers (keeps data volumes)
 	docker compose down

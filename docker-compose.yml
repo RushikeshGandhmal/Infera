@@ -1,17 +1,129 @@
-# Infera — local infrastructure.
+# Infera — full local stack.
 #
-# Backing services the app depends on:
+# Services:
+#   web               Next.js chat UI and metrics page
+#   gateway           FastAPI chat API
+#   ingestion         FastAPI log ingestion API
+#   worker            Redpanda -> ClickHouse consumer
 #   postgres          stores conversations and messages
 #   clickhouse        stores inference logs (fast analytics)
 #   redpanda          event broker (Kafka API) between the SDK and storage
 #   redpanda-console  web UI to inspect broker topics
 #   grafana           dashboards, pre-wired to ClickHouse
 #
-# Start it:  cp .env.example .env   &&   make infra
+# Start it:  cp .env.example .env   &&   docker compose up --build
 
 name: infera
 
 services:
+  # -- Application -------------------------------------------------------------
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    image: infera-web:compose
+    container_name: infera-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [infera]
+
+  gateway:
+    build:
+      context: .
+      dockerfile: services/gateway/Dockerfile
+    image: infera-gateway:compose
+    container_name: infera-gateway
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-infera}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-infera}
+      POSTGRES_DB: ${POSTGRES_DB:-infera}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENROUTER_APP_TITLE: ${OPENROUTER_APP_TITLE:-Infera}
+      OPENROUTER_APP_URL: ${OPENROUTER_APP_URL:-http://localhost:3000}
+      DEFAULT_MODEL: ${DEFAULT_MODEL:-openai/gpt-4o-mini}
+      INGESTION_URL: http://ingestion:8001/v1/logs
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_HTTP_PORT: 8123
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-infera}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-infera}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-infera}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      ingestion:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [infera]
+
+  ingestion:
+    build:
+      context: .
+      dockerfile: services/ingestion/Dockerfile
+    image: infera-ingestion:compose
+    container_name: infera-ingestion
+    restart: unless-stopped
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      TOPIC_RAW: ${TOPIC_RAW:-inference.logs.raw}
+      TOPIC_DLQ: ${TOPIC_DLQ:-inference.logs.dlq}
+    ports:
+      - "8001:8001"
+    depends_on:
+      redpanda-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=2)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [infera]
+
+  worker:
+    image: infera-ingestion:compose
+    container_name: infera-worker
+    restart: unless-stopped
+    command: ["python", "-m", "app.consumer"]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      TOPIC_RAW: ${TOPIC_RAW:-inference.logs.raw}
+      TOPIC_DLQ: ${TOPIC_DLQ:-inference.logs.dlq}
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_HTTP_PORT: 8123
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-infera}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-infera}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-infera}
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      redpanda-init:
+        condition: service_completed_successfully
+      ingestion:
+        condition: service_started
+    networks: [infera]
+
   # ── PostgreSQL ──────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
@@ -95,6 +207,23 @@ services:
       start_period: 5s
     networks: [infera]
 
+  redpanda-init:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.7
+    container_name: infera-redpanda-init
+    environment:
+      TOPIC_RAW: ${TOPIC_RAW:-inference.logs.raw}
+      TOPIC_DLQ: ${TOPIC_DLQ:-inference.logs.dlq}
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        rpk topic create "$$TOPIC_RAW" --brokers redpanda:9092 -p 3 || true
+        rpk topic create "$$TOPIC_DLQ" --brokers redpanda:9092 -p 1 || true
+    networks: [infera]
+
   # ── Redpanda Console (topic inspector UI) ────────────────────────────────────
   redpanda-console:
     image: docker.redpanda.com/redpandadata/console:v2.7.2
@@ -129,8 +258,8 @@ services:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
       # Passed through to the provisioned datasource config:
-      CLICKHOUSE_HOST: ${CLICKHOUSE_HOST:-clickhouse}
-      CLICKHOUSE_NATIVE_PORT: ${CLICKHOUSE_NATIVE_PORT:-9000}
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_NATIVE_PORT: 9000
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-infera}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-infera}
       CLICKHOUSE_DB: ${CLICKHOUSE_DB:-infera}

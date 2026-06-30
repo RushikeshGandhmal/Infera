@@ -49,7 +49,8 @@ wait_for() { # name, command
 start_infra() {
   c_blue "==> Starting docker infrastructure"
   test -f "$ROOT/.env" || cp "$ROOT/.env.example" "$ROOT/.env"
-  (cd "$ROOT" && docker compose up -d >/dev/null 2>&1)
+  (cd "$ROOT" && docker compose up -d \
+    postgres clickhouse redpanda redpanda-init redpanda-console grafana >/dev/null 2>&1)
 
   wait_for "postgres"   docker compose -f "$ROOT/docker-compose.yml" exec -T postgres pg_isready -U infera
   wait_for "clickhouse" curl -sf http://localhost:8123/ping
