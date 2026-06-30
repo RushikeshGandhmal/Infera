@@ -8,7 +8,8 @@ from __future__ import annotations
 import pytest
 
 from infera import InferaClient, InferenceStatus
-from infera.providers import MockProvider
+from infera.providers import FallbackProvider, MockProvider
+from infera.providers.base import ProviderResult, StreamChunk
 from infera.schemas import InferenceLogEvent
 
 
@@ -73,3 +74,34 @@ async def test_redaction_scrubs_previews() -> None:
     assert ev.redacted is True
     assert "x@y.com" not in (ev.input_preview or "")
     assert "a@b.com" not in (ev.output_preview or "")
+
+
+class FailingProvider(MockProvider):
+    name = "failing"
+
+    async def chat(self, messages, model, **kwargs) -> ProviderResult:
+        raise RuntimeError("primary unavailable")
+
+    async def stream(self, messages, model, **kwargs):
+        raise RuntimeError("primary unavailable")
+        yield StreamChunk()  # pragma: no cover
+
+
+async def test_fallback_provider_uses_fallback_model() -> None:
+    provider = FallbackProvider(
+        FailingProvider(),
+        MockProvider(),
+        fallback_model="qwen3:14b",
+    )
+    client = InferaClient(provider=provider, auto_start=False)
+    events = _capture(client)
+
+    result = await client.chat(
+        messages=[{"role": "user", "content": "hi"}],
+        model="openai/gpt-4o-mini",
+    )
+
+    assert result.provider == "mock"
+    assert result.model == "qwen3:14b"
+    assert events[0].provider == "mock"
+    assert events[0].model == "qwen3:14b"

@@ -22,13 +22,17 @@ class Settings(BaseSettings):
     postgres_host: str = "localhost"
     postgres_port: int = 5432
 
-    # LLM access (OpenRouter). If no key is set, the gateway falls back to a
-    # mock provider so it still runs end-to-end without spending anything.
+    # LLM access. In "auto" mode, OpenRouter is used when a key is configured;
+    # otherwise the gateway uses local Ollama. Use "mock" only for offline tests.
+    llm_provider: str = "auto"  # auto | openrouter | ollama | mock
     openrouter_api_key: str | None = None
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     openrouter_app_title: str | None = "Infera"
     openrouter_app_url: str | None = None
-    default_model: str = "openai/gpt-4o-mini"
+    openrouter_fallback_to_ollama: bool = True
+    ollama_base_url: str = "http://localhost:11434/v1"
+    ollama_model: str = "qwen3:14b"
+    default_model: str = "qwen3:14b"
 
     # Where the SDK ships inference logs. None = don't ship (until ingestion exists).
     ingestion_url: str | None = None

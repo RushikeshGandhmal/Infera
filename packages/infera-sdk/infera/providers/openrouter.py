@@ -76,7 +76,7 @@ class OpenRouterProvider(Provider):
         return ProviderResult(
             text=data["choices"][0]["message"]["content"],
             model=actual_model,
-            provider=_provider_from_model(actual_model),
+            provider=self.provider_for(actual_model),
             usage=_usage_from_payload(data),
             cost_usd=None,  # exact cost is looked up separately; left optional here
             raw=data,
