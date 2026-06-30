@@ -9,6 +9,7 @@ can render directly (no Grafana embed needed).
 from __future__ import annotations
 
 import asyncio
+import math
 from typing import Any
 
 import clickhouse_connect
@@ -17,6 +18,34 @@ from fastapi import APIRouter, Query
 from ..config import get_settings
 
 router = APIRouter(prefix="/metrics", tags=["metrics"])
+
+
+def _int(value: Any) -> int:
+    """Coerce a ClickHouse value to int, treating None/NaN as 0.
+
+    Empty windows make aggregates like quantile() return NaN, which is truthy
+    so an `x or 0` guard would not catch it and int(NaN) would raise.
+    """
+    if value is None:
+        return 0
+    try:
+        if isinstance(value, float) and math.isnan(value):
+            return 0
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _float(value: Any) -> float:
+    """Coerce a ClickHouse value to float, treating None/NaN as 0.0."""
+    if value is None:
+        return 0.0
+    try:
+        f = float(value)
+        return 0.0 if math.isnan(f) else f
+    except (TypeError, ValueError):
+        return 0.0
+
 
 # window -> (lookback hours, timeseries bucket in seconds)
 _WINDOWS: dict[str, tuple[int, int]] = {
@@ -94,8 +123,8 @@ def _query_all(window: str) -> dict[str, Any]:
     finally:
         client.close()
 
-    requests = int(totals[0] or 0)
-    errors = int(totals[1] or 0)
+    requests = _int(totals[0])
+    errors = _int(totals[1])
     error_rate = round(100 * errors / requests, 2) if requests else 0.0
 
     return {
@@ -103,40 +132,40 @@ def _query_all(window: str) -> dict[str, Any]:
         "totals": {
             "requests": requests,
             "error_rate": error_rate,
-            "p50_ms": int(totals[2] or 0),
-            "p95_ms": int(totals[3] or 0),
-            "p99_ms": int(totals[4] or 0),
-            "avg_ttft_ms": int(totals[5] or 0),
-            "total_tokens": int(totals[6] or 0),
-            "total_cost_usd": float(totals[7] or 0.0),
+            "p50_ms": _int(totals[2]),
+            "p95_ms": _int(totals[3]),
+            "p99_ms": _int(totals[4]),
+            "avg_ttft_ms": _int(totals[5]),
+            "total_tokens": _int(totals[6]),
+            "total_cost_usd": _float(totals[7]),
         },
         "timeseries": [
             {
                 "t": row[0].isoformat(),
-                "requests": int(row[1] or 0),
-                "errors": int(row[2] or 0),
-                "p95_ms": int(row[3] or 0),
+                "requests": _int(row[1]),
+                "errors": _int(row[2]),
+                "p95_ms": _int(row[3]),
             }
             for row in ts_rows
         ],
         "by_provider": [
             {
                 "provider": row[0],
-                "requests": int(row[1] or 0),
-                "p95_ms": int(row[2] or 0),
-                "errors": int(row[3] or 0),
-                "tokens": int(row[4] or 0),
-                "cost_usd": float(row[5] or 0.0),
+                "requests": _int(row[1]),
+                "p95_ms": _int(row[2]),
+                "errors": _int(row[3]),
+                "tokens": _int(row[4]),
+                "cost_usd": _float(row[5]),
             }
             for row in by_provider
         ],
         "by_model": [
             {
                 "model": row[0],
-                "requests": int(row[1] or 0),
-                "p95_ms": int(row[2] or 0),
-                "errors": int(row[3] or 0),
-                "tokens": int(row[4] or 0),
+                "requests": _int(row[1]),
+                "p95_ms": _int(row[2]),
+                "errors": _int(row[3]),
+                "tokens": _int(row[4]),
             }
             for row in by_model
         ],
