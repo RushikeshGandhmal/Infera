@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     ingestion_url: str | None = None
     redact_previews: bool = False
 
+    # ClickHouse (read-only) — powers the in-app /metrics page. Same names as the
+    # ingestion service, so the value source is consistent across the stack.
+    clickhouse_host: str = "localhost"
+    clickhouse_http_port: int = 8123
+    clickhouse_user: str = "infera"
+    clickhouse_password: str = "infera"
+    clickhouse_db: str = "infera"
+
     # How many recent messages to send back to the model as context.
     max_context_messages: int = 20
 

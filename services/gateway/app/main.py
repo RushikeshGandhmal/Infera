@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .db import init_models
-from .routers import chat, conversations
+from .routers import chat, conversations, metrics
 from .sdk_client import get_client
 
 
@@ -39,6 +39,7 @@ app.add_middleware(
 
 app.include_router(chat.router)
 app.include_router(conversations.router)
+app.include_router(metrics.router)
 
 
 @app.get("/health", tags=["meta"])
