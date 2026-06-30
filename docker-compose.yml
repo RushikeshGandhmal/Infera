@@ -51,11 +51,15 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-infera}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
+      LLM_PROVIDER: ${LLM_PROVIDER:-auto}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
       OPENROUTER_APP_TITLE: ${OPENROUTER_APP_TITLE:-Infera}
       OPENROUTER_APP_URL: ${OPENROUTER_APP_URL:-http://localhost:3000}
-      DEFAULT_MODEL: ${DEFAULT_MODEL:-openai/gpt-4o-mini}
+      OPENROUTER_FALLBACK_TO_OLLAMA: ${OPENROUTER_FALLBACK_TO_OLLAMA:-true}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434/v1}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:14b}
+      DEFAULT_MODEL: ${DEFAULT_MODEL:-qwen3:14b}
       INGESTION_URL: http://ingestion:8001/v1/logs
       CLICKHOUSE_HOST: clickhouse
       CLICKHOUSE_HTTP_PORT: 8123

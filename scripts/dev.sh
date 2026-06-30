@@ -32,6 +32,7 @@ export POSTGRES_HOST=localhost
 export CLICKHOUSE_HOST=localhost
 export KAFKA_BOOTSTRAP_SERVERS=localhost:19092
 export INGESTION_URL=http://localhost:8001/v1/logs
+export OLLAMA_BASE_URL=http://localhost:11434/v1
 
 c_green() { printf "\033[32m%s\033[0m\n" "$1"; }
 c_blue()  { printf "\033[36m%s\033[0m\n" "$1"; }
@@ -96,6 +97,7 @@ start_svc() { # name, dir, command...
     export CLICKHOUSE_HOST=localhost
     export KAFKA_BOOTSTRAP_SERVERS=localhost:19092
     export INGESTION_URL=http://localhost:8001/v1/logs
+    export OLLAMA_BASE_URL=http://localhost:11434/v1
     nohup "$@" > "$RUN_DIR/$name.log" 2>&1 &
     echo $! > "$pidfile"
   )
